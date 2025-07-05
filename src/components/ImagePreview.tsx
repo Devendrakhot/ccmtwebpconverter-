@@ -21,13 +21,13 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({ image, onDownload, o
           className="w-full h-48 object-cover"
         />
         <div className="absolute top-2 right-2 flex space-x-2">
-          <button
+          {/* <button
             onClick={() => setShowComparison(!showComparison)}
             className="p-2 bg-black bg-opacity-50 text-white rounded-full hover:bg-opacity-70 transition-all"
             title={showComparison ? 'Show WebP' : 'Show Original'}
           >
             <Eye className="w-4 h-4" />
-          </button>
+          </button> */}
           <button
             onClick={() => onRemove(image.id)}
             className="p-2 bg-red-500 bg-opacity-80 text-white rounded-full hover:bg-opacity-100 transition-all"
