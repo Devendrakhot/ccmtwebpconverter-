@@ -15,6 +15,7 @@ interface VideoFile {
   status: 'pending' | 'converting' | 'completed';
   progress: number;
   audioUrl?: string;
+  audioBlob?: Blob;
 }
 
 function App() {
@@ -49,9 +50,7 @@ function App() {
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-return (bytes / Math.pow(k, i)).toFixed(2) + ' ' + sizes[i];
-
-
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2) + ' ' + sizes[i];
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -93,48 +92,111 @@ return (bytes / Math.pow(k, i)).toFixed(2) + ' ' + sizes[i];
     setVideoFiles(prev => [...prev, ...newFiles]);
   };
 
-  const simulateConversion = async (fileId: string) => {
-    setVideoFiles(prev => prev.map(f => 
-      f.id === fileId ? { ...f, status: 'converting' as const } : f
-    ));
-
-    // Simulate conversion progress
-    for (let i = 0; i <= 100; i += 10) {
-      await new Promise(resolve => setTimeout(resolve, 200));
-      setVideoFiles(prev => prev.map(f => 
-        f.id === fileId ? { ...f, progress: i } : f
-      ));
-    }
-
-    // Create download URL
-    const audioBlob = new Blob([''], { type: 'audio/mp3' });
-    const audioUrl = URL.createObjectURL(audioBlob);
-
-    setVideoFiles(prev => prev.map(f => 
-      f.id === fileId ? { 
-        ...f, 
-        status: 'completed' as const, 
-        progress: 100,
-        audioUrl 
-      } : f
-    ));
+  const extractAudioFromVideo = async (videoFile: File): Promise<Blob> => {
+    return new Promise((resolve) => {
+      // Create a video element
+      const video = document.createElement('video');
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      
+      // Create a file reader to read the video file
+      const reader = new FileReader();
+      
+      reader.onload = async function(e) {
+        if (!e.target?.result) return;
+        
+        // Set video source
+        video.src = URL.createObjectURL(new Blob([e.target.result as ArrayBuffer], { type: videoFile.type }));
+        
+        await video.play().catch(e => console.error('Video play error:', e));
+        
+        // Create media source
+        const source = audioContext.createMediaElementSource(video);
+        const destination = audioContext.createMediaStreamDestination();
+        
+        source.connect(destination);
+        source.connect(audioContext.destination);
+        
+        // Record the audio
+        const mediaRecorder = new MediaRecorder(destination.stream);
+        const audioChunks: BlobPart[] = [];
+        
+        mediaRecorder.ondataavailable = (e) => {
+          audioChunks.push(e.data);
+        };
+        
+        mediaRecorder.onstop = () => {
+          const audioBlob = new Blob(audioChunks, { type: 'audio/mp3' });
+          resolve(audioBlob);
+        };
+        
+        mediaRecorder.start();
+        
+        // Stop recording when video ends
+        video.onended = () => {
+          mediaRecorder.stop();
+        };
+      };
+      
+      reader.readAsArrayBuffer(videoFile);
+    });
   };
 
-  const convertVideoFile = async (fileId: string) => {
+  const convertVideoToAudio = async (fileId: string) => {
     setIsConvertingVideo(true);
-    await simulateConversion(fileId);
-    setIsConvertingVideo(false);
+    setVideoFiles(prev => prev.map(f => 
+      f.id === fileId ? { ...f, status: 'converting' } : f
+    ));
+
+    try {
+      const file = videoFiles.find(f => f.id === fileId);
+      if (!file) return;
+
+      // Simulate progress (in a real app, you'd use actual progress events)
+      for (let i = 0; i <= 100; i += 10) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        setVideoFiles(prev => prev.map(f => 
+          f.id === fileId ? { ...f, progress: i } : f
+        ));
+      }
+
+      // Extract audio
+      const audioBlob = await extractAudioFromVideo(file.file);
+      const audioUrl = URL.createObjectURL(audioBlob);
+
+      setVideoFiles(prev => prev.map(f => 
+        f.id === fileId ? { 
+          ...f, 
+          status: 'completed',
+          progress: 100,
+          audioUrl,
+          audioBlob
+        } : f
+      ));
+    } catch (error) {
+      console.error('Conversion error:', error);
+      setVideoFiles(prev => prev.map(f => 
+        f.id === fileId ? { ...f, status: 'pending', progress: 0 } : f
+      ));
+    } finally {
+      setIsConvertingVideo(false);
+    }
   };
 
   const removeVideoFile = (fileId: string) => {
-    setVideoFiles(prev => prev.filter(f => f.id !== fileId));
+    setVideoFiles(prev => {
+      const file = prev.find(f => f.id === fileId);
+      if (file?.audioUrl) {
+        URL.revokeObjectURL(file.audioUrl);
+      }
+      return prev.filter(f => f.id !== fileId);
+    });
   };
 
   const downloadAudio = (file: VideoFile) => {
-    if (file.audioUrl) {
+    if (file.audioUrl && file.audioBlob) {
       const a = document.createElement('a');
       a.href = file.audioUrl;
-      a.download = `${file.name.split('.')[0]}.mp3`;
+      a.download = `${file.name.replace(/\.[^/.]+$/, '')}.mp3`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -142,6 +204,11 @@ return (bytes / Math.pow(k, i)).toFixed(2) + ' ' + sizes[i];
   };
 
   const clearAllVideos = () => {
+    videoFiles.forEach(file => {
+      if (file.audioUrl) {
+        URL.revokeObjectURL(file.audioUrl);
+      }
+    });
     setVideoFiles([]);
   };
 
@@ -291,7 +358,7 @@ return (bytes / Math.pow(k, i)).toFixed(2) + ' ' + sizes[i];
                           <div className="flex items-center space-x-2">
                             {file.status === 'pending' && (
                               <button
-                                onClick={() => convertVideoFile(file.id)}
+                                onClick={() => convertVideoToAudio(file.id)}
                                 className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition-colors"
                                 disabled={isConvertingVideo}
                               >
