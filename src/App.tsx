@@ -1,3 +1,5 @@
+// App.tsx
+
 import React, { useRef, useState } from 'react';
 import { FileImage, Upload, FileVideo, Download, Music, Trash2 } from 'lucide-react';
 import { DropZone } from './components/DropZone';
@@ -19,14 +21,12 @@ interface VideoFile {
   audioBlob?: Blob;
 }
 
-// Initialize FFmpeg
-const ffmpeg = createFFmpeg({ 
+const ffmpeg = createFFmpeg({
   log: true,
   corePath: 'https://unpkg.com/@ffmpeg/core@0.10.0/dist/ffmpeg-core.js'
 });
 
 function App() {
-  // Image conversion state
   const {
     convertedImages,
     isConverting: isConvertingImages,
@@ -39,13 +39,11 @@ function App() {
     clearAll: clearAllImages
   } = useImageConverter();
 
-  // Video to audio state
   const [videoFiles, setVideoFiles] = useState<VideoFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isFFmpegLoading, setIsFFmpegLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load FFmpeg when component mounts
   React.useEffect(() => {
     const loadFFmpeg = async () => {
       setIsFFmpegLoading(true);
@@ -57,19 +55,17 @@ function App() {
     loadFFmpeg();
   }, []);
 
-  // Image conversion handlers
   const handleImageFilesSelected = async (files: File[]) => {
     const options: ConversionOptions = { quality: 0.8, lossless: false };
     await convertImages(files, options);
   };
 
-  // Video conversion handlers
   const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2) + ' ' + sizes[i];
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -97,14 +93,15 @@ function App() {
   };
 
   const handleVideoFiles = (fileList: File[]) => {
-    const videoFiles = fileList.filter(file => 
-      file.type.startsWith('video/') || 
-      file.name.endsWith('.mkv') || 
+    const videoFiles = fileList.filter(file =>
+      file.type.startsWith('video/') ||
+      file.name.endsWith('.mkv') ||
       file.name.endsWith('.avi') ||
       file.name.endsWith('.mov') ||
-      file.name.endsWith('.flv')
+      file.name.endsWith('.flv') ||
+      file.name.endsWith('.mxf') // ✅ MXF support
     );
-    
+
     const newFiles: VideoFile[] = videoFiles.map(file => ({
       id: Math.random().toString(36).substr(2, 9),
       file,
@@ -123,7 +120,7 @@ function App() {
       return;
     }
 
-    setVideoFiles(prev => prev.map(f => 
+    setVideoFiles(prev => prev.map(f =>
       f.id === fileId ? { ...f, status: 'converting' } : f
     ));
 
@@ -131,40 +128,37 @@ function App() {
       const file = videoFiles.find(f => f.id === fileId);
       if (!file) return;
 
-      // Write the file to FFmpeg's file system
       ffmpeg.FS('writeFile', file.name, await fetchFile(file.file));
 
-      // Run the FFmpeg command to extract audio
       await ffmpeg.run(
-        '-i', file.name,         // Input file
-        '-q:a', '0',            // Audio quality (0 is highest)
-        '-map', 'a',            // Map audio streams only
-        'output.mp3'           // Output file
+        '-i', file.name,
+        '-q:a', '0',
+        '-map', 'a',
+        'output.mp3'
       );
 
-      // Read the result
       const data = ffmpeg.FS('readFile', 'output.mp3');
 
-      // Create Blob and URL
       const audioBlob = new Blob([data.buffer], { type: 'audio/mp3' });
       const audioUrl = URL.createObjectURL(audioBlob);
 
-      setVideoFiles(prev => prev.map(f => 
-        f.id === fileId ? { 
-          ...f, 
-          status: 'completed',
-          progress: 100,
-          audioUrl,
-          audioBlob
-        } : f
+      setVideoFiles(prev => prev.map(f =>
+        f.id === fileId
+          ? {
+              ...f,
+              status: 'completed',
+              progress: 100,
+              audioUrl,
+              audioBlob
+            }
+          : f
       ));
 
-      // Clean up FFmpeg files
       ffmpeg.FS('unlink', file.name);
       ffmpeg.FS('unlink', 'output.mp3');
     } catch (error) {
       console.error('Conversion error:', error);
-      setVideoFiles(prev => prev.map(f => 
+      setVideoFiles(prev => prev.map(f =>
         f.id === fileId ? { ...f, status: 'pending', progress: 0 } : f
       ));
     }
@@ -202,7 +196,6 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-teal-50">
-      {/* Header */}
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex items-center justify-between">
@@ -219,35 +212,26 @@ function App() {
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="space-y-12">
           {/* Image Conversion Section */}
           <section className="space-y-8">
             <h2 className="text-xl font-semibold text-gray-800">Image Conversion</h2>
-            
-            {/* Drop Zone */}
-            <DropZone 
-              onFilesSelected={handleImageFilesSelected} 
-              isConverting={isConvertingImages} 
+            <DropZone
+              onFilesSelected={handleImageFilesSelected}
+              isConverting={isConvertingImages}
               accept="image/*"
             />
-
-            {/* Conversion Controls */}
             <ConversionControls
               hasConvertedImages={convertedImages.length > 0}
               onDownloadAll={downloadAllImages}
               onClearAll={clearAllImages}
             />
-
-            {/* Progress Bar */}
             <ProgressBar
               progress={imageProgress}
               total={convertedImages.length + (isConvertingImages ? 1 : 0)}
               isVisible={isConvertingImages}
             />
-
-            {/* Error Message */}
             {imageError && (
               <div className="w-full max-w-4xl mx-auto">
                 <div className="bg-red-50 border border-red-200 rounded-lg p-4">
@@ -255,8 +239,6 @@ function App() {
                 </div>
               </div>
             )}
-
-            {/* Results Grid */}
             {convertedImages.length > 0 && (
               <div className="w-full max-w-7xl mx-auto">
                 <div className="flex items-center justify-between mb-6">
@@ -264,7 +246,6 @@ function App() {
                     Converted Images ({convertedImages.length})
                   </h3>
                 </div>
-
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {convertedImages.map((image) => (
                     <ImagePreview
@@ -279,11 +260,9 @@ function App() {
             )}
           </section>
 
-          {/* Video to Audio Conversion Section */}
+          {/* Video to Audio Section */}
           <section className="space-y-8">
             <h2 className="text-xl font-semibold text-gray-800">Video to Audio Conversion</h2>
-            
-            {/* Upload Area */}
             <div
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
@@ -296,7 +275,7 @@ function App() {
             >
               <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">Drop video files here</h3>
-              <p className="text-gray-600 mb-4">Supports MP4, MKV, AVI, MOV, FLV and more</p>
+              <p className="text-gray-600 mb-4">Supports MP4, MKV, AVI, MOV, FLV, MXF and more</p>
               <button
                 onClick={() => fileInputRef.current?.click()}
                 className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
@@ -308,14 +287,13 @@ function App() {
                 ref={fileInputRef}
                 type="file"
                 multiple
-                accept="video/*,.mkv,.avi,.mov,.flv"
+                accept="video/*,.mkv,.avi,.mov,.flv,.mxf" // ✅ updated accept
                 onChange={handleVideoFileSelect}
                 className="hidden"
                 disabled={isFFmpegLoading}
               />
             </div>
 
-            {/* Files List */}
             {videoFiles.length > 0 && (
               <div className="w-full max-w-7xl mx-auto">
                 <div className="flex items-center justify-between mb-6">
@@ -330,7 +308,6 @@ function App() {
                     Clear All
                   </button>
                 </div>
-
                 <div className="bg-white rounded-lg shadow">
                   <div className="divide-y">
                     {videoFiles.map((file) => (
@@ -343,7 +320,6 @@ function App() {
                               <p className="text-sm text-gray-500">{file.size}</p>
                             </div>
                           </div>
-
                           <div className="flex items-center space-x-2">
                             {file.status === 'pending' && (
                               <button
@@ -354,7 +330,6 @@ function App() {
                                 Convert to MP3
                               </button>
                             )}
-                            
                             {file.status === 'completed' && (
                               <button
                                 onClick={() => downloadAudio(file)}
@@ -363,7 +338,6 @@ function App() {
                                 <Download className="h-4 w-4" />
                               </button>
                             )}
-                            
                             <button
                               onClick={() => removeVideoFile(file.id)}
                               className="bg-red-600 text-white p-2 rounded hover:bg-red-700 transition-colors"
@@ -372,7 +346,6 @@ function App() {
                             </button>
                           </div>
                         </div>
-
                         {file.status === 'converting' && (
                           <div className="mt-3">
                             <div className="flex justify-between text-sm text-gray-600 mb-1">
