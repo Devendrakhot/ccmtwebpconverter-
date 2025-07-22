@@ -8,7 +8,8 @@ import { ImagePreview } from './components/ImagePreview';
 import { ProgressBar } from './components/ProgressBar';
 import { useImageConverter } from './hooks/useImageConverter';
 import { ConversionOptions } from './types';
-import { createFFmpeg, fetchFile } from '@ffmpeg/ffmpeg';
+import {  fetchFile } from '@ffmpeg/ffmpeg';
+const { createFFmpeg } = await import('@ffmpeg/ffmpeg');
 
 interface VideoFile {
   id: string;
