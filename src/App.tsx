@@ -1,11 +1,13 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { FileImage, Upload, FileVideo, Download, Music, Trash2 } from 'lucide-react';
-import { DropZone } from './components/DropZone';
-import { ConversionControls } from './components/ConversionControls';
-import { ImagePreview } from './components/ImagePreview';
-import { ProgressBar } from './components/ProgressBar';
+import { FileVideo, Upload, Download, Trash2 } from 'lucide-react';
 import { useImageConverter } from './hooks/useImageConverter';
 import { ConversionOptions } from './types';
+
+declare global {
+  interface Window {
+    FFmpeg: any;
+  }
+}
 
 interface VideoFile {
   id: string;
@@ -41,15 +43,18 @@ function App() {
 
   useEffect(() => {
     const loadFFmpeg = async () => {
+      if (!window.FFmpeg || !window.FFmpeg.createFFmpeg) {
+        alert('FFmpeg script not loaded from CDN');
+        return;
+      }
       setIsFFmpegLoading(true);
-      const { createFFmpeg, fetchFile } = await import('@ffmpeg/ffmpeg');
-      const ffmpeg = createFFmpeg({
+      const ffmpeg = window.FFmpeg.createFFmpeg({
         log: true,
-        corePath: 'https://unpkg.com/@ffmpeg/core@0.10.0/dist/ffmpeg-core.js'
+        corePath: 'https://unpkg.com/@ffmpeg/core@0.10.0/dist/ffmpeg-core.js',
       });
       await ffmpeg.load();
       setFFmpegInstance(ffmpeg);
-      setFetchFileFunc(() => fetchFile);
+      setFetchFileFunc(() => window.FFmpeg.fetchFile);
       setIsFFmpegLoading(false);
     };
     loadFFmpeg();
@@ -187,11 +192,7 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-teal-50">
-      {/* Header, DropZone, Controls, Image Conversion Section */}
-      {/* Keep your existing layout here... */}
-
-      {/* Video Conversion Section */}
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-teal-50 p-6">
       <section className="space-y-8 mt-12">
         <h2 className="text-xl font-semibold text-gray-800">Video to Audio Conversion</h2>
 
